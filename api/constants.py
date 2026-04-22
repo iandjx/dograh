@@ -56,6 +56,16 @@ POSTHOG_API_KEY = os.getenv("POSTHOG_API_KEY")
 POSTHOG_HOST = os.getenv("POSTHOG_HOST", "https://us.i.posthog.com")
 
 
+# External RAG database (read-only, bring-your-own Postgres + pgvector)
+# Set EXTERNAL_RAG_DB_URL and EXTERNAL_RAG_TABLE to bypass the internal knowledge base
+# for retrieval and query your own table instead.
+EXTERNAL_RAG_DB_URL = os.getenv("EXTERNAL_RAG_DB_URL")
+EXTERNAL_RAG_TABLE = os.getenv("EXTERNAL_RAG_TABLE")
+EXTERNAL_RAG_TEXT_COLUMN = os.getenv("EXTERNAL_RAG_TEXT_COLUMN", "text")
+EXTERNAL_RAG_EMBEDDING_COLUMN = os.getenv("EXTERNAL_RAG_EMBEDDING_COLUMN", "embedding")
+# Optional: explicit name column. When unset, falls back to metadata->>'source'
+EXTERNAL_RAG_NAME_COLUMN = os.getenv("EXTERNAL_RAG_NAME_COLUMN", "")
+
 ENABLE_ARI_STASIS = os.getenv("ENABLE_ARI_STASIS", "false").lower() == "true"
 SERIALIZE_LOG_OUTPUT = os.getenv("SERIALIZE_LOG_OUTPUT", "false").lower() == "true"
 

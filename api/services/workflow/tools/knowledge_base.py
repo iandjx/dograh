@@ -12,8 +12,16 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 from opentelemetry import trace
 
+from api.constants import (
+    EXTERNAL_RAG_DB_URL,
+    EXTERNAL_RAG_EMBEDDING_COLUMN,
+    EXTERNAL_RAG_NAME_COLUMN,
+    EXTERNAL_RAG_TABLE,
+    EXTERNAL_RAG_TEXT_COLUMN,
+)
 from api.db import db_client
 from api.services.gen_ai import OpenAIEmbeddingService
+from api.services.gen_ai.embedding.external_rag_service import ExternalRAGService
 from api.services.pipecat.tracing_config import ensure_tracing
 
 
@@ -209,60 +217,98 @@ async def _perform_retrieval(
     try:
         chunks = []
 
-        # Check for full_document mode documents and return their full text
-        if document_uuids:
-            full_text_docs = await db_client.get_full_text_documents(
-                organization_id=organization_id,
-                document_uuids=document_uuids,
-            )
-            for doc in full_text_docs:
-                if doc.full_text:
-                    chunks.append(
-                        {
-                            "text": doc.full_text,
-                            "filename": doc.filename,
-                            "similarity": 1.0,
-                            "chunk_index": 0,
-                        }
-                    )
-
-            # Filter out full_document UUIDs so vector search only hits chunked docs
-            full_doc_uuids = {doc.document_uuid for doc in full_text_docs}
-            chunked_uuids = [u for u in document_uuids if u not in full_doc_uuids]
-        else:
-            chunked_uuids = document_uuids
-
-        # Perform vector similarity search on chunked documents
-        if chunked_uuids is None or len(chunked_uuids) > 0:
+        if EXTERNAL_RAG_DB_URL and EXTERNAL_RAG_TABLE:
+            # Use the caller-supplied Postgres DB instead of the internal knowledge base.
             if not embeddings_api_key:
                 raise ValueError(
                     "Embeddings API key not configured. Please set your API key in "
                     "Model Configurations > Embedding."
                 )
 
-            embedding_service = OpenAIEmbeddingService(
-                db_client=db_client,
+            embedding_service = ExternalRAGService(
+                db_url=EXTERNAL_RAG_DB_URL,
+                table=EXTERNAL_RAG_TABLE,
                 api_key=embeddings_api_key,
                 model_id=embeddings_model or "text-embedding-3-small",
                 base_url=embeddings_base_url,
+                text_column=EXTERNAL_RAG_TEXT_COLUMN,
+                embedding_column=EXTERNAL_RAG_EMBEDDING_COLUMN,
+                name_column=EXTERNAL_RAG_NAME_COLUMN,
             )
 
             results = await embedding_service.search_similar_chunks(
                 query=query,
                 organization_id=organization_id,
                 limit=limit,
-                document_uuids=chunked_uuids if chunked_uuids else None,
+                document_uuids=document_uuids,
             )
 
-            for result in results:
-                chunk_info = {
-                    "text": result.get("contextualized_text")
-                    or result.get("chunk_text"),
+            chunks = [
+                {
+                    "text": result.get("contextualized_text") or result.get("chunk_text"),
                     "filename": result.get("filename"),
                     "similarity": round(result.get("similarity", 0), 4),
                     "chunk_index": result.get("chunk_index"),
                 }
-                chunks.append(chunk_info)
+                for result in results
+            ]
+        else:
+            # Default: internal knowledge base (full_document + chunked vector search).
+
+            # Check for full_document mode documents and return their full text
+            if document_uuids:
+                full_text_docs = await db_client.get_full_text_documents(
+                    organization_id=organization_id,
+                    document_uuids=document_uuids,
+                )
+                for doc in full_text_docs:
+                    if doc.full_text:
+                        chunks.append(
+                            {
+                                "text": doc.full_text,
+                                "filename": doc.filename,
+                                "similarity": 1.0,
+                                "chunk_index": 0,
+                            }
+                        )
+
+                # Filter out full_document UUIDs so vector search only hits chunked docs
+                full_doc_uuids = {doc.document_uuid for doc in full_text_docs}
+                chunked_uuids = [u for u in document_uuids if u not in full_doc_uuids]
+            else:
+                chunked_uuids = document_uuids
+
+            # Perform vector similarity search on chunked documents
+            if chunked_uuids is None or len(chunked_uuids) > 0:
+                if not embeddings_api_key:
+                    raise ValueError(
+                        "Embeddings API key not configured. Please set your API key in "
+                        "Model Configurations > Embedding."
+                    )
+
+                embedding_service = OpenAIEmbeddingService(
+                    db_client=db_client,
+                    api_key=embeddings_api_key,
+                    model_id=embeddings_model or "text-embedding-3-small",
+                    base_url=embeddings_base_url,
+                )
+
+                results = await embedding_service.search_similar_chunks(
+                    query=query,
+                    organization_id=organization_id,
+                    limit=limit,
+                    document_uuids=chunked_uuids if chunked_uuids else None,
+                )
+
+                for result in results:
+                    chunk_info = {
+                        "text": result.get("contextualized_text")
+                        or result.get("chunk_text"),
+                        "filename": result.get("filename"),
+                        "similarity": round(result.get("similarity", 0), 4),
+                        "chunk_index": result.get("chunk_index"),
+                    }
+                    chunks.append(chunk_info)
 
         logger.info(
             f"Knowledge base retrieval: query='{query}', "
