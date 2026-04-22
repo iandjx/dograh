@@ -60,7 +60,7 @@ if [[ "$DOGRAH_SKIP_DOWNLOAD" != "1" ]]; then
     cd dograh
 
     echo -e "${BLUE}[1/5] Downloading docker-compose.yaml...${NC}"
-    curl -sS -o docker-compose.yaml https://raw.githubusercontent.com/dograh-hq/dograh/main/docker-compose.yaml
+    curl -sS -o docker-compose.yaml https://raw.githubusercontent.com/iandjx/dograh/main/docker-compose.yaml
     echo -e "${GREEN}✓ docker-compose.yaml downloaded${NC}"
 else
     echo -e "${BLUE}[1/5] Using docker-compose.yaml in current directory${NC}"
