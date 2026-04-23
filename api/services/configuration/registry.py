@@ -34,6 +34,7 @@ class ServiceProviders(str, Enum):
     RIME = "rime"
     OPENAI_REALTIME = "openai_realtime"
     GOOGLE_REALTIME = "google_realtime"
+    LITELLM = "litellm"
 
 
 class BaseServiceConfiguration(BaseModel):
@@ -53,6 +54,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.RIME,
         ServiceProviders.OPENAI_REALTIME,
         ServiceProviders.GOOGLE_REALTIME,
+        ServiceProviders.LITELLM,
         # ServiceProviders.SARVAM,
     ]
     api_key: str | list[str]
@@ -1065,8 +1067,25 @@ class OpenRouterEmbeddingsConfiguration(BaseEmbeddingsConfiguration):
     base_url: str = Field(default="https://openrouter.ai/api/v1")
 
 
+@register_embeddings
+class LiteLLMEmbeddingsConfiguration(BaseEmbeddingsConfiguration):
+    provider: Literal[ServiceProviders.LITELLM] = ServiceProviders.LITELLM
+    model: str = Field(
+        default="",
+        description="Model name as recognised by your LiteLLM proxy (e.g. amazon.titan-embed-text-v2:0)",
+    )
+    base_url: str = Field(
+        default="",
+        description="Base URL of your LiteLLM proxy (e.g. https://litellm-proxy.example.com/v1)",
+    )
+
+
 EmbeddingsConfig = Annotated[
-    Union[OpenAIEmbeddingsConfiguration, OpenRouterEmbeddingsConfiguration],
+    Union[
+        OpenAIEmbeddingsConfiguration,
+        OpenRouterEmbeddingsConfiguration,
+        LiteLLMEmbeddingsConfiguration,
+    ],
     Field(discriminator="provider"),
 ]
 
